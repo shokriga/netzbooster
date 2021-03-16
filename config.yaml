@@ -1,0 +1,27 @@
+network: "networks/elec_s_50_ec_lv1.0_Co2L0.1-1H.nc"
+
+load_shedding: true
+rolling_horizon: true
+snapshots: 100  
+
+co2_price:
+  start: 100
+  stop: 120
+  step: 10
+
+co2_factor:
+  start: 1
+  stop: 8
+  step: 1
+
+solver:
+  name: gurobi
+  threads: 4
+  method: 2
+  crossover: 0
+  BarConvTol: 1.e-4
+  FeasibilityTol: 1.e-5
+  AggFill: 0
+  PreDual: 0
+  GURO_PAR_BARDENSETHRESH: 200
+  BarHomogeneous: 1
