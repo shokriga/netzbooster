@@ -15,7 +15,7 @@ import gc
 
 # for testing
 if 'snakemake' not in globals():
-#     os.chdir("/home/ws/bw0928/mnt/lisa/netzbooster")
+    # os.chdir("/home/ws/bw0928/mnt/lisa/netzbooster")
     from vresutils import Dict
     import yaml
     snakemake = Dict()
@@ -213,9 +213,11 @@ def add_to_objective(n, snapshots):
 
     #  (a) costs for Netzbooster capacities
     # sum_i ( c_pos * P(i)_pos + c_neg * P(i)_neg)
+    # add noise to the netzbooster capacitiy costs to avoid numerical troubles
+    coefficient1_noise = np.random.normal(coefficient1, .01, get_var(n, "Bus", "P_pos").shape)
     netzbooster_cap_cost = linexpr(
-                                (coefficient1, get_var(n, "Bus", "P_pos").loc[buses]),
-                                (coefficient1, get_var(n, "Bus", "P_neg").loc[buses])
+                                (coefficient1_noise, get_var(n, "Bus", "P_pos")),
+                                (coefficient1_noise, get_var(n, "Bus", "P_neg"))
                                 ).sum()
 
     write_objective(n, netzbooster_cap_cost)
@@ -223,9 +225,11 @@ def add_to_objective(n, snapshots):
 
     # (b) costs for compensation dispatch (paid to DSM consumers/running costs for storage)
     # sum_(i, t, k) ( o_pos * p(i, t, k)_pos + o_neg * p(i, t, k)_pos)
+    # add noise to the marginal costs to avoid numerical troubles
+    coefficient2_noise = np.random.normal(coefficient2, .00001, get_var(n, "Bus", "p_pos").shape)
     compensate_p_cost = linexpr(
-                                (coefficient2, get_var(n, "Bus", "p_pos").loc[snapshots, buses]),
-                                (coefficient2, get_var(n, "Bus", "p_neg").loc[snapshots, buses]),
+                                (coefficient2_noise, get_var(n, "Bus", "p_pos").loc[snapshots]),
+                                (coefficient2_noise, get_var(n, "Bus", "p_neg").loc[snapshots]),
                                 ).sum().sum()
 
     write_objective(n, compensate_p_cost)
@@ -367,23 +371,11 @@ def netzbooster_lopf(n, snapshots, extra_functionality,
                                    extra_functionality, solver_dir)
     fds, solution_fn = mkstemp(prefix='pypsa-solve', suffix='.sol', dir=solver_dir)
 
-    
-    
-    # ------------------------------------------------------------------------------
-    for t in n.iterate_components():
-        if 'capital_cost' in t.df:
-            np.random.seed(174)
-            t.df['capital_cost'] += (np.random.random(len(t.df)) - 0.5)
-        if 'marginal_cost' in t.df:
-            np.random.seed(174)
-            t.df['marginal_cost'] += 1e-2 + 2e-3*(np.random.random(len(t.df)) - 0.5)
-    
-    
-    
+
     # solve the linear problem --------------------------------------------------
-    
+
     logger.info(f"Solve linear problem using {solver_name.title()} solver")
-    
+
     solve = eval(f'run_and_read_{solver_name}')
     # with 2 snapshots this takes about 4 minutes (230.99 seconds)
     res = solve(n, problem_fn, solution_fn, solver_logfile,
@@ -434,7 +426,7 @@ def save_results_as_csv(n, snapshots):
 
 
 
-#%%
+#%% MAIN
 
 # import network
 n = pypsa.Network(snakemake.input[0])
@@ -445,7 +437,7 @@ solver_options = snakemake.config["solver"]
 solver_name = "gurobi" #solver_options.pop("name")
 
 # for testing only consider 50 snapshots
-snapshots = n.snapshots#[:50]
+snapshots = n.snapshots[:2]
 
 # run lopf with netzbooster constraints and modified objective
 n = netzbooster_lopf(n, snapshots, extra_functionality)
